@@ -5,20 +5,29 @@ import { config } from '../config/index.js';
 
 const DEFAULT_SYSTEM = `You are a helpful AI assistant. Reply clearly and concisely.`;
 
-// Build OpenAI-style messages array — Ollama /api/chat handles templating automatically
+// Build messages array for Ollama /api/chat.
+// Gemma 2B's template has no system role — prepend system prompt into the
+// first user message so it works across all models without template errors.
 function buildMessages(message, history = [], systemPrompt = '') {
-  const messages = [];
+  const sys = systemPrompt.trim() || DEFAULT_SYSTEM;
+  const msgs = [];
 
-  messages.push({ role: 'system', content: systemPrompt.trim() || DEFAULT_SYSTEM });
+  const historyMsgs = history
+    .slice(-10)
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .map((m) => ({ role: m.role, content: m.text }));
 
-  for (const msg of history.slice(-10)) {
-    if (msg.role === 'user' || msg.role === 'assistant') {
-      messages.push({ role: msg.role, content: msg.text });
-    }
+  if (historyMsgs.length > 0) {
+    // Inject system into the first user turn in history
+    const firstUser = historyMsgs.find((m) => m.role === 'user');
+    if (firstUser) firstUser.content = `${sys}\n\n${firstUser.content}`;
+    msgs.push(...historyMsgs, { role: 'user', content: message });
+  } else {
+    // No history — inject system into current user message
+    msgs.push({ role: 'user', content: `${sys}\n\n${message}` });
   }
 
-  messages.push({ role: 'user', content: message });
-  return messages;
+  return msgs;
 }
 
 export async function chat(req, res, next) {
