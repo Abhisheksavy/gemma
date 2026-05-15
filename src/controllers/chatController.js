@@ -3,24 +3,22 @@ import { inferenceQueue } from '../utils/queue.js';
 import { recordRequest, snapshot } from '../utils/metrics.js';
 import { config } from '../config/index.js';
 
-// Build a Gemma-formatted prompt from system prompt + history + current message
-function buildPrompt(message, history = [], systemPrompt = '') {
-  let prompt = '';
+const DEFAULT_SYSTEM = `You are a helpful AI assistant. Reply clearly and concisely.`;
 
-  if (systemPrompt?.trim()) {
-    prompt += `<system>\n${systemPrompt.trim()}\n</system>\n`;
-  }
+// Build OpenAI-style messages array — Ollama /api/chat handles templating automatically
+function buildMessages(message, history = [], systemPrompt = '') {
+  const messages = [];
+
+  messages.push({ role: 'system', content: systemPrompt.trim() || DEFAULT_SYSTEM });
 
   for (const msg of history.slice(-10)) {
-    if (msg.role === 'user') {
-      prompt += `<start_of_turn>user\n${msg.text}\n<end_of_turn>\n`;
-    } else if (msg.role === 'assistant') {
-      prompt += `<start_of_turn>model\n${msg.text}\n<end_of_turn>\n`;
+    if (msg.role === 'user' || msg.role === 'assistant') {
+      messages.push({ role: msg.role, content: msg.text });
     }
   }
 
-  prompt += `<start_of_turn>user\n${message}\n<end_of_turn>\n<start_of_turn>model\n`;
-  return prompt;
+  messages.push({ role: 'user', content: message });
+  return messages;
 }
 
 export async function chat(req, res, next) {
@@ -34,17 +32,12 @@ export async function chat(req, res, next) {
     return res.status(400).json({ error: 'history must be an array.' });
   }
 
-  const prompt = buildPrompt(message.trim(), history ?? [], systemPrompt ?? '');
-
-  if (prompt.length > config.maxMessageLength * 10) {
-    return res.status(400).json({ error: 'Conversation too long.' });
-  }
-
+  const messages = buildMessages(message.trim(), history ?? [], systemPrompt ?? '');
   const startedAt = Date.now();
   req.log.info({ chars: message.trim().length, historyLen: (history ?? []).length }, 'Chat request');
 
   try {
-    const reply = await inferenceQueue.enqueue(() => generate(prompt, req.log));
+    const reply = await inferenceQueue.enqueue(() => generate(messages, req.log));
     const latencyMs = Date.now() - startedAt;
     recordRequest({ success: true, latencyMs });
     req.log.info({ latencyMs }, 'Chat response sent');
