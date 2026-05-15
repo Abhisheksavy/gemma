@@ -9,7 +9,12 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive \
     NODE_ENV=production \
     PORT=3000 \
-    OLLAMA_MODELS=/root/.ollama/models
+    OLLAMA_MODELS=/root/.ollama/models \
+    # Memory optimizations for CPU-only / low-RAM deployments
+    OLLAMA_NUM_PARALLEL=1 \
+    OLLAMA_MAX_LOADED_MODELS=1 \
+    OLLAMA_FLASH_ATTENTION=1 \
+    OLLAMA_KV_CACHE_TYPE=q8_0
 
 # ── System deps ───────────────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \

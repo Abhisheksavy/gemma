@@ -25,8 +25,10 @@ services:
         value: "3000"
       - key: OLLAMA_BASE_URL
         value: http://localhost:11434
+      # tinyllama:1b = 637 MB, fits in 2 GB Render Standard, ~5-10s on CPU
+      # gemma:2b    = 1.7 GB, needs Render Pro (4 GB) to avoid OOM
       - key: OLLAMA_MODEL
-        value: gemma:2b
+        value: tinyllama:1b
       - key: OLLAMA_TIMEOUT_MS
         value: "90000"
       - key: OLLAMA_MAX_RETRIES
