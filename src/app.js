@@ -8,6 +8,7 @@ import chatRouter from './routes/chat.js';
 import { requestId } from './middleware/requestId.js';
 import { httpLogger } from './middleware/httpLogger.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { setupSwagger } from './utils/swagger.js';
 
 const app = express();
 
@@ -52,6 +53,9 @@ app.use(express.json({ limit: '64kb' }));
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api', chatRouter);
+
+// ── Swagger UI (/api/docs) ────────────────────────────────────────────────────
+setupSwagger(app);
 
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ error: 'Not found.' }));
