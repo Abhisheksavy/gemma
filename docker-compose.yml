@@ -12,7 +12,8 @@ services:
     environment:
       - OLLAMA_NUM_PARALLEL=1
       - OLLAMA_MAX_LOADED_MODELS=1
-    # Remove the deploy block below if you have no GPU
+      - OLLAMA_FLASH_ATTENTION=1
+    # Uncomment for GPU support:
     # deploy:
     #   resources:
     #     reservations:
@@ -22,10 +23,25 @@ services:
     #           capabilities: [gpu]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
+      interval: 15s
       timeout: 10s
-      retries: 5
+      retries: 6
       start_period: 30s
+
+  # One-shot container: pull the model then exit.
+  # Runs before the API starts, only if model not already present.
+  model-puller:
+    image: ollama/ollama:latest
+    container_name: gemma_model_puller
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ollama_data:/root/.ollama
+    entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-gemma:2b}"]
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
 
   api:
     build:
@@ -39,12 +55,17 @@ services:
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
     depends_on:
-      ollama:
-        condition: service_healthy
+      model-puller:
+        condition: service_completed_successfully
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 300M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
 
 volumes:
   ollama_data:

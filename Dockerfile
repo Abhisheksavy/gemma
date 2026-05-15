@@ -1,30 +1,34 @@
-# ── Stage 1: deps ────────────────────────────────────────────────────────────
+# ── Stage 1: install production deps ─────────────────────────────────────────
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json ./
-RUN npm install --omit=dev --ignore-scripts
+RUN npm install --omit=dev --ignore-scripts && npm cache clean --force
 
-# ── Stage 2: runtime ─────────────────────────────────────────────────────────
+# ── Stage 2: production image ─────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 WORKDIR /app
 
-# Non-root user for security
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# tini: proper PID-1 signal forwarding (fixes SIGTERM not reaching Node)
+RUN apk add --no-cache tini
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY package.json ./
-COPY src ./src
-COPY server.js ./
+# Non-root user
+RUN addgroup -S app && adduser -S app -G app
 
-RUN chown -R appuser:appgroup /app
-USER appuser
+COPY --from=deps --chown=app:app /app/node_modules ./node_modules
+COPY --chown=app:app package.json ./
+COPY --chown=app:app src ./src
+COPY --chown=app:app server.js ./
+
+USER app
 
 ENV NODE_ENV=production \
     PORT=3000
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-  CMD wget -qO- http://localhost:3000/api/health || exit 1
+# tini wraps Node so SIGTERM/SIGINT work correctly
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "--max-old-space-size=256", "server.js"]
 
-CMD ["node", "server.js"]
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD wget -qO- http://localhost:3000/api/health || exit 1
