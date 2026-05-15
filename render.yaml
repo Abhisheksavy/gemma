@@ -1,0 +1,62 @@
+# Render Blueprint — deploy with one click or via render.com dashboard.
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: gemma-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile.render
+    region: singapore          # closest to India; alternatively: oregon, frankfurt
+    plan: standard             # 2 GB RAM — minimum for Gemma 2B quantized
+                               # upgrade to pro (4 GB) for faster responses
+    healthCheckPath: /api/health
+
+    # Persistent disk keeps the model between deploys (~1.7 GB for gemma:2b)
+    # Without this the model re-downloads on every deploy (~5–10 min wait)
+    disk:
+      name: ollama-models
+      mountPath: /root/.ollama
+      sizeGB: 10               # 10 GB covers multiple models if you ever switch
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: OLLAMA_BASE_URL
+        value: http://localhost:11434
+      - key: OLLAMA_MODEL
+        value: gemma:2b
+      - key: OLLAMA_TIMEOUT_MS
+        value: "90000"
+      - key: OLLAMA_MAX_RETRIES
+        value: "2"
+      - key: OLLAMA_RETRY_DELAY_MS
+        value: "1000"
+      - key: OLLAMA_NUM_PREDICT
+        value: "512"
+      - key: OLLAMA_TEMPERATURE
+        value: "0.7"
+      - key: OLLAMA_TOP_P
+        value: "0.9"
+      - key: OLLAMA_REPEAT_PENALTY
+        value: "1.1"
+      - key: CB_FAILURE_THRESHOLD
+        value: "5"
+      - key: CB_COOLDOWN_MS
+        value: "30000"
+      - key: QUEUE_CONCURRENCY
+        value: "1"
+      - key: QUEUE_MAX_PENDING
+        value: "10"
+      - key: RATE_LIMIT_WINDOW_MS
+        value: "60000"
+      - key: RATE_LIMIT_MAX
+        value: "30"
+      - key: MAX_MESSAGE_LENGTH
+        value: "2000"
+      - key: CORS_ORIGIN
+        value: "*"             # change to your frontend URL before going live
+      # Set API_KEY in Render dashboard (not here — keep secrets out of git)
+      # - key: API_KEY
+      #   value: your-secret-key

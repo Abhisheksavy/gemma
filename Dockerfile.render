@@ -1,0 +1,47 @@
+# Render-specific image: Node.js + Ollama in one container.
+# Uses Ubuntu so Ollama's install script works without issues.
+#
+# Render persistent disk should be mounted at /root/.ollama
+# so models survive redeploys and aren't re-downloaded every time.
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    NODE_ENV=production \
+    PORT=3000 \
+    OLLAMA_MODELS=/root/.ollama/models
+
+# ── System deps ───────────────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl \
+      ca-certificates \
+      tini \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Node.js 20 ────────────────────────────────────────────────────────────────
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Ollama binary ─────────────────────────────────────────────────────────────
+RUN curl -fsSL https://ollama.com/install.sh | sh
+
+# ── App ───────────────────────────────────────────────────────────────────────
+WORKDIR /app
+
+COPY package.json ./
+RUN npm install --omit=dev --ignore-scripts && npm cache clean --force
+
+COPY src ./src
+COPY server.js ./
+COPY start.sh ./
+RUN chmod +x start.sh
+
+EXPOSE 3000
+
+# tini ensures SIGTERM reaches both Ollama and Node during Render shutdown
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["/app/start.sh"]
+
+HEALTHCHECK --interval=30s --timeout=15s --start-period=180s --retries=5 \
+  CMD curl -sf http://localhost:3000/api/health || exit 1
