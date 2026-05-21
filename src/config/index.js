@@ -29,7 +29,10 @@ export const config = {
 
   ollama: {
     baseUrl: requireEnv('OLLAMA_BASE_URL', 'http://localhost:11434'),
-    model: requireEnv('OLLAMA_MODEL', 'gemma:2b'),
+    // Default to Gemma 4 E4B — Google's latest open model (Apr 2026).
+    // Multimodal (text + image), 256K context, 140+ languages, ~9.6 GB.
+    // Alternatives: gemma4:e2b (7.2 GB), gemma4:26b (18 GB), gemma4:31b (20 GB).
+    model: requireEnv('OLLAMA_MODEL', 'gemma4:e4b'),
     timeoutMs: parsePositiveInt('OLLAMA_TIMEOUT_MS', 90_000),
     // Retry config
     maxRetries: parsePositiveInt('OLLAMA_MAX_RETRIES', 2),

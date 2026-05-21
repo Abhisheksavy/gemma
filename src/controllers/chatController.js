@@ -5,29 +5,22 @@ import { config } from '../config/index.js';
 
 const DEFAULT_SYSTEM = `You are a helpful AI assistant. Reply clearly and concisely.`;
 
-// Build messages array for Ollama /api/chat.
-// Gemma 2B's template has no system role — prepend system prompt into the
-// first user message so it works across all models without template errors.
-function buildMessages(message, history = [], systemPrompt = '') {
-  const sys = systemPrompt.trim() || DEFAULT_SYSTEM;
-  const msgs = [];
+// Gemma 4 supports the system role natively via Ollama's chat template.
+// Clean payload — no triple injection needed.
+function buildPayload(message, history = [], systemPrompt = '') {
+  const sys = (systemPrompt || '').trim() || DEFAULT_SYSTEM;
 
   const historyMsgs = history
     .slice(-10)
-    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string')
     .map((m) => ({ role: m.role, content: m.text }));
 
-  if (historyMsgs.length > 0) {
-    // Inject system into the first user turn in history
-    const firstUser = historyMsgs.find((m) => m.role === 'user');
-    if (firstUser) firstUser.content = `${sys}\n\n${firstUser.content}`;
-    msgs.push(...historyMsgs, { role: 'user', content: message });
-  } else {
-    // No history — inject system into current user message
-    msgs.push({ role: 'user', content: `${sys}\n\n${message}` });
-  }
+  const messages = [
+    ...historyMsgs,
+    { role: 'user', content: message },
+  ];
 
-  return msgs;
+  return { system: sys, messages };
 }
 
 export async function chat(req, res, next) {
@@ -41,12 +34,20 @@ export async function chat(req, res, next) {
     return res.status(400).json({ error: 'history must be an array.' });
   }
 
-  const messages = buildMessages(message.trim(), history ?? [], systemPrompt ?? '');
+  const { system, messages } = buildPayload(message.trim(), history ?? [], systemPrompt ?? '');
   const startedAt = Date.now();
-  req.log.info({ chars: message.trim().length, historyLen: (history ?? []).length }, 'Chat request');
+  req.log.info(
+    {
+      chars: message.trim().length,
+      historyLen: (history ?? []).length,
+      systemChars: system.length,
+      customSystem: Boolean((systemPrompt || '').trim()),
+    },
+    'Chat request',
+  );
 
   try {
-    const reply = await inferenceQueue.enqueue(() => generate(messages, req.log));
+    const reply = await inferenceQueue.enqueue(() => generate(messages, req.log, system));
     const latencyMs = Date.now() - startedAt;
     recordRequest({ success: true, latencyMs });
     req.log.info({ latencyMs }, 'Chat response sent');

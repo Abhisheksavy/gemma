@@ -39,7 +39,7 @@ services:
         condition: service_healthy
     volumes:
       - ollama_data:/root/.ollama
-    entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-gemma:2b}"]
+    entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-gemma4:e4b}"]
     environment:
       - OLLAMA_HOST=http://ollama:11434
 

@@ -59,28 +59,33 @@ function sanitize(raw) {
 }
 
 // ── Public: generate ──────────────────────────────────────────────────────────
-// Uses Ollama /api/chat — passes messages array so Ollama applies the correct
-// model chat template automatically (no manual <start_of_turn> injection).
-export async function generate(messages, reqLog = logger) {
+// Uses Ollama /api/chat — passes messages array plus an optional top-level
+// `system` so Ollama applies the model's chat template (including the system
+// anchor) for us. This is the supported way to inject a system prompt for
+// models like Gemma that don't expose a `system` role in their template.
+export async function generate(messages, reqLog = logger, system) {
   cbCheck();
 
   const doRequest = async () => {
+    const body = {
+      model: config.ollama.model,
+      messages,
+      stream: false,
+      options: {
+        num_predict: config.ollama.numPredict,
+        temperature: config.ollama.temperature,
+        top_p: config.ollama.topP,
+        repeat_penalty: config.ollama.repeatPenalty,
+      },
+    };
+    if (system && typeof system === 'string') body.system = system;
+
     const response = await fetchWithTimeout(
       `${config.ollama.baseUrl}/api/chat`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: config.ollama.model,
-          messages,
-          stream: false,
-          options: {
-            num_predict: config.ollama.numPredict,
-            temperature: config.ollama.temperature,
-            top_p: config.ollama.topP,
-            repeat_penalty: config.ollama.repeatPenalty,
-          },
-        }),
+        body: JSON.stringify(body),
       },
       config.ollama.timeoutMs,
     );
