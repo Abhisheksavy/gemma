@@ -63,7 +63,7 @@ function sanitize(raw) {
 // `system` so Ollama applies the model's chat template (including the system
 // anchor) for us. This is the supported way to inject a system prompt for
 // models like Gemma that don't expose a `system` role in their template.
-export async function generate(messages, reqLog = logger, system) {
+export async function generate(messages, reqLog = logger, system, numGpu = 99, temperature = undefined) {
   cbCheck();
 
   const doRequest = async () => {
@@ -71,11 +71,15 @@ export async function generate(messages, reqLog = logger, system) {
       model: config.ollama.model,
       messages,
       stream: false,
+      keep_alive: -1,
       options: {
+        num_ctx: config.ollama.numCtx,
         num_predict: config.ollama.numPredict,
-        temperature: config.ollama.temperature,
+        temperature: temperature !== undefined ? temperature : config.ollama.temperature,
+        top_k: config.ollama.topK,
         top_p: config.ollama.topP,
         repeat_penalty: config.ollama.repeatPenalty,
+        num_gpu: numGpu,
       },
     };
     if (system && typeof system === 'string') body.system = system;
@@ -115,6 +119,74 @@ export async function generate(messages, reqLog = logger, system) {
     reqLog.error({ err }, 'Ollama fetch failed');
     throw new OllamaError('Could not reach Ollama.', 503);
   }
+}
+
+// ── Public: generateStream ────────────────────────────────────────────────────
+export async function* generateStream(messages, reqLog = logger, system, numGpu = 99, temperature = undefined) {
+  cbCheck();
+
+  const body = {
+    model: config.ollama.model,
+    messages,
+    stream: true,
+    keep_alive: -1,
+    options: {
+      num_ctx: config.ollama.numCtx,
+      num_predict: config.ollama.numPredict,
+      temperature: temperature !== undefined ? temperature : config.ollama.temperature,
+      top_k: config.ollama.topK,
+      top_p: config.ollama.topP,
+      repeat_penalty: config.ollama.repeatPenalty,
+      num_gpu: numGpu,
+    },
+  };
+  if (system && typeof system === 'string') body.system = system;
+
+  let response;
+  try {
+    response = await fetchWithTimeout(
+      `${config.ollama.baseUrl}/api/chat`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+      config.ollama.timeoutMs,
+    );
+  } catch (err) {
+    cbFailure();
+    throw err instanceof OllamaError ? err : new OllamaError('Could not reach Ollama.', 503);
+  }
+
+  if (!response.ok) {
+    cbFailure();
+    const errBody = await response.text().catch(() => '');
+    reqLog.error({ status: response.status, body: errBody.slice(0, 300) }, 'Ollama stream non-2xx');
+    throw new OllamaError(`Ollama returned ${response.status}`, response.status);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const parsed = JSON.parse(line);
+          const token = parsed.message?.content ?? '';
+          if (token) yield token;
+          if (parsed.done) { cbSuccess(); return; }
+        } catch { /* skip malformed line */ }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  cbSuccess();
 }
 
 // ── Public: healthCheck ───────────────────────────────────────────────────────

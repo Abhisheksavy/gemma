@@ -41,10 +41,12 @@ export const config = {
     cbFailureThreshold: parsePositiveInt('CB_FAILURE_THRESHOLD', 5),
     cbCooldownMs: parsePositiveInt('CB_COOLDOWN_MS', 30_000),
     // Generation options (tunable per deployment)
-    numPredict: parsePositiveInt('OLLAMA_NUM_PREDICT', 512),
-    temperature: parseFloat(process.env.OLLAMA_TEMPERATURE ?? '0.7'),
-    topP: parseFloat(process.env.OLLAMA_TOP_P ?? '0.9'),
-    repeatPenalty: parseFloat(process.env.OLLAMA_REPEAT_PENALTY ?? '1.1'),
+    numCtx: parsePositiveInt('OLLAMA_NUM_CTX', 1024),
+    numPredict: parsePositiveInt('OLLAMA_NUM_PREDICT', 80),
+    temperature: parseFloat(process.env.OLLAMA_TEMPERATURE ?? '0.4'),
+    topP: parseFloat(process.env.OLLAMA_TOP_P ?? '1.0'),
+    topK: parsePositiveInt('OLLAMA_TOP_K', 20),
+    repeatPenalty: parseFloat(process.env.OLLAMA_REPEAT_PENALTY ?? '1.0'),
   },
 
   queue: {

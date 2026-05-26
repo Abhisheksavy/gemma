@@ -23,7 +23,7 @@ app.use(cors({
   origin: config.cors.origin,
   methods: ['GET', 'POST'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
-  exposedHeaders: ['X-Request-ID'],
+  exposedHeaders: ['X-Request-ID', 'Content-Type'],
 }));
 
 // ── Compression ───────────────────────────────────────────────────────────────
